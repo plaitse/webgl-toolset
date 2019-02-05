@@ -13,7 +13,7 @@ class Tetrahedron {
             x: cx,
             y: cy + height / 2,
             z: cz,
-            r: 1, // Red
+            r: 0, // Red
             g: 0, // Green
             b: 0  // blue
         };
@@ -25,7 +25,7 @@ class Tetrahedron {
             z: cz + radius,
             r: 0,
             g: 0,
-            b: 1
+            b: 0
         };
 
         // Vertice 3 - Position
@@ -35,7 +35,7 @@ class Tetrahedron {
             z: cz - (Math.sin(Math.PI / 6) * radius),
             r: 0,
             g: 0,
-            b: 1
+            b: 0
         };
 
         // Vertice 4 - Position
@@ -43,9 +43,9 @@ class Tetrahedron {
             x: cx - width / 2,
             y: cy - height / 2,
             z: cz - (Math.sin(Math.PI / 6) * radius),
-            r: 1,
+            r: 0,
             g: 0,
-            b: 1
+            b: 0
         };
 
         Tetrahedron.addSurface([v1, v2, v3]);
@@ -124,7 +124,7 @@ drawScene = (gl, programInfo, buffers, tetraRotation) => {
     mat4.lookAt(viewMatrix, [0, 0, -2], [0, 0, 0], [0, 1, 0]);
 
     // Arg: destination matrix, matrix to rotate, amount to rotate in radians, axis to rotate around (X)
-    mat4.rotate(modelViewMatrix, identityMatrix, tetraRotation, [0, 1, 0]);
+    mat4.rotate(modelViewMatrix, identityMatrix, tetraRotation, [-1, -1, -1]);
 
     const normalize = false,
         stride = 6 * Float32Array.BYTES_PER_ELEMENT,
@@ -150,8 +150,8 @@ drawScene = (gl, programInfo, buffers, tetraRotation) => {
     gl.uniformMatrix4fv(programInfo.uniformLocations.projectionMatrix, normalize, projectionMatrix);
 
     // Params: mode, first, count
-    // To empty triangle, use gl.LINES
-    gl.drawArrays(gl.TRIANGLES, 0, positions.length / 6);
+    // To full triangle, use gl.TRIANGLES
+    gl.drawArrays(gl.LINES, 0, positions.length / 6);
 }
 
 
@@ -213,7 +213,7 @@ initShaderProgram = (gl, vsSource, fsSource) => {
 // --------------------- //
 
 main = () => {
-    const canvas = document.getElementById('webgl7');
+    const canvas = document.getElementById('webgl8');
     const gl = canvas.getContext('webgl');
     
     // If no context stop
