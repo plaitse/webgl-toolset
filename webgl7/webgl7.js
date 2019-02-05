@@ -40,179 +40,207 @@ class Pyramid {
             b: Math.random()
         };
 
-        Pyramid.addSurface(v1, v2, v3);
-        Pyramid.addSurface(v1, v3, v4);
-        Pyramid.addSurface(v1, v4, v2);
-        Pyramid.addSurface(v4, v2, v3);
+        Pyramid.addSurface([v1, v2, v3]);
+        Pyramid.addSurface([v1, v3, v4]);
+        Pyramid.addSurface([v1, v4, v2]);
+        Pyramid.addSurface([v3, v2, v4]);
     }
 
-    static addSurface(v1, v2, v3) {
-        let first = Object.values(v1),
-            second = Object.values(v2),
-            third = Object.values(v3);
-
-        first.forEach(element => vertices.push(element));
-        second.forEach(element => vertices.push(element));
-        third.forEach(element => vertices.push(element)); 
+    static addSurface(surface) {
+        surface.forEach(element => {
+            const value = Object.values(element);
+            value.forEach(element => vertices.push(element));
+        });
     }
 }
 
-const vertexShaderCode = [
-    "precision mediump float;",
-    "",
-    "attribute vec3 vertPosition;", // attributes are like parameters input unique to each vertex
-    "attribute vec3 vertColor;",
-    "varying vec3 fragColor;", // varying are like outputs that goes to frag shader
-    "",
-    "uniform mat4 mWorld;", // uniform are like parameter input that are the same for all vertices
-    "uniform mat4 mView;",
-    "uniform mat4 mProj;",
-    "void main()",
-    "{",
-    "    fragColor = vertColor;",
-    "    gl_Position = mProj * mView * mWorld * vec4(vertPosition, 1.0);", // [x,y,z,1.0]
-    "}"
-].join('\n');
+// ------------------- //
+// --- Init buffer --- //
+// ------------------- //
 
-// Vertex shader program
-// const vertexShaderCode = `
-//     precision mediump float;
+// Initialize the buffers we'll need
+initBuffers = (gl) => {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+}
 
-//     attribute vec3 vertPosition;
-//     attribute vec3 vertColor;
-//     varying vec3 fragColor;
+// ------------------- //
+// --- Load shader --- //
+// ------------------- //
 
-//     uniform mat4 mWorld;
-//     uniform mat4 mView;
-//     uniform mat4 mProj;
-//     void main() {
-//         fragColor = vertColor;
-//         gl_Position = mProj * mView * mWorld * vec4(vertPosition, 1.0);",
-//     }
-// `;
+// Creates a shader of the given type, uploads the source and compiles it
+loadShader = (gl, type, source) => {
+    const shader = gl.createShader(type);
 
-const fragmentShaderCode = [
-    "precision mediump float;",
-    "",
-    "varying vec3 fragColor;",
-    "void main()",
-    "{",
-    "    gl_FragColor = vec4(fragColor, 1.0);",
-    "}"
-].join('\n');
+    // Send the source to the shader object
+    gl.shaderSource(shader, source);
 
-// Fragment shader program
-// const fragmentShaderCode = `
-//     precision mediump float
+    // Compile the shader program
+    gl.compileShader(shader);
 
-//     varying vec3 fragColor;
+    // If compilation failed stop
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.log('An error occurred compiling the shaders: ' + gl.getShaderInfoLog(shader));
+        gl.deleteShader(shader);
+        return null;
+    }
 
-//     void main() {
-//         gl_FragColor = vec4(fragColor, 1.0);
-//     }
-// `;
+    return shader;
+}
 
-init = () => {
+// --------------------------- //
+// --- Init shader program --- //
+// --------------------------- //
+
+// Initialize a shader program so WebGL knows how to draw our data
+initShaderProgram = (gl, vsSource, fsSource) => {
+    const vertexShader = loadShader(gl, gl.VERTEX_SHADER, vsSource);
+    const fragmentShader = loadShader(gl, gl.FRAGMENT_SHADER, fsSource);
+
+    // Create the shader program
+    const shaderProgram = gl.createProgram();
+    gl.attachShader(shaderProgram, vertexShader);
+    gl.attachShader(shaderProgram, fragmentShader);
+    gl.linkProgram(shaderProgram);
+
+    // If the shader program failed, stop
+    if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+        console.log('Unable to initialize the shader program: ' + gl.getProgramInfoLog(shaderProgram));
+        return null;
+    }
+
+    return shaderProgram;
+}
+
+// --------------------- //
+// --- Main function --- //
+// --------------------- //
+
+main = () => {
     const canvas = document.getElementById('webgl7');
     const gl = canvas.getContext('webgl');
     
+    // If no context stop
     if (!gl) {
         console.log('Unable to initialize WebGL. Your browser or machine may not support it.');
         return;
     }
-   
-    /* --------------- */
-    /* --- SHADERS --- */
-    /* --------------- */
 
-    // Create shader
-    const vertexShader = gl.createShader(gl.VERTEX_SHADER);
-    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+    // Vertex shader program
+    const vsSource = `
+    precision mediump float;
 
-    // Add shader source code
-    gl.shaderSource(vertexShader, vertexShaderCode );
-    gl.shaderSource(fragmentShader, fragmentShaderCode);
+    attribute vec3 aVertexPosition;
+    attribute vec3 aVertexColor;
 
-    // Compile shader
-    gl.compileShader(vertexShader);
-    gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS);
-    gl.compileShader(fragmentShader);
-    gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS);
+    uniform mat4 mWorld;
+    uniform mat4 uModelViewMatrix;
+    uniform mat4 uProjectionMatrix;
 
-    // Create program
-    var program = gl.createProgram();
+    varying lowp vec3 vColor;
 
-    // Attach shader to it
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
+    void main() {
+        gl_Position = uProjectionMatrix * uModelViewMatrix * mWorld * vec4(aVertexPosition, 1.0);
+        vColor = aVertexColor;
+    }
+    `;
 
-    // Link the program
-    gl.linkProgram(program);
-    gl.getProgramParameter(program, gl.LINK_STATUS);
+    // Fragment shader program
+    const fsSource = `
+    precision mediump float;
 
-    // Validate the program
-    gl.getProgramParameter(program, gl.VALIDATE_STATUS);
+    varying lowp vec3 vColor;
 
-    /* --------------- */
-    /* --- BUFFERS --- */
-    /* --------------- */
+    void main() {
+        gl_FragColor = vec4(vColor, 1.0);
+    }
+    `;
+
+    // Initialize a shader program; this is where all the lighting for the vertices and so forth is established
+    const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
 
     new Pyramid(0, 0, 0, 1, Math.sqrt(6) / 3);
     
-    const vertexBufferObject = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBufferObject);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);    
-    
-    const positionAttribLocation = gl.getAttribLocation(program, "vertPosition");
-    // 2nd: number of elements, 3rd: type of element, 5th: size of each vertex, 6th: offset from beginning of vertex to this attribute
-    gl.vertexAttribPointer(positionAttribLocation, 3, gl.FLOAT, gl.FALSE, 6 * Float32Array.BYTES_PER_ELEMENT, 0);
-    const colorAttribLocation = gl.getAttribLocation(program, "vertColor");
-    // 2nd: number of elements, 3rd: type of element, 5th: size of each vertex, 6th: offset from beginning of vertex to this attribute
-    gl.vertexAttribPointer(colorAttribLocation, 3, gl.FLOAT, gl.FALSE, 6 * Float32Array.BYTES_PER_ELEMENT, 3 * Float32Array.BYTES_PER_ELEMENT);
-    gl.enableVertexAttribArray(positionAttribLocation);
-    gl.enableVertexAttribArray(colorAttribLocation);
-    gl.useProgram(program);
-    
-    const mWorldUniformLocation = gl.getUniformLocation(program, "mWorld"),
-          mViewUniformLocation = gl.getUniformLocation(program, "mView"),
-          mProjUniformLocation = gl.getUniformLocation(program, "mProj"),
-          worldMatrix = new Float32Array(16),
+    // Init buffers
+    initBuffers(gl);
+
+    // Collect all the info needed to use the shader program
+    const programInfo = {
+        attribLocations: {
+            vertexPosition: gl.getAttribLocation(shaderProgram, 'aVertexPosition'),
+            vertexColor: gl.getAttribLocation(shaderProgram, 'aVertexColor'),
+        },
+        uniformLocations: {
+            mWorldUniformLocation: gl.getUniformLocation(shaderProgram, 'mWorld'),
+            projectionMatrix: gl.getUniformLocation(shaderProgram, 'uProjectionMatrix'),
+            modelViewMatrix: gl.getUniformLocation(shaderProgram, 'uModelViewMatrix'),
+        },
+    };
+
+    const worldMatrix = new Float32Array(16),
           viewMatrix = new Float32Array(16),
-          projMatrix = new Float32Array(16);
+          normalize = false,
+          stride = 6 * Float32Array.BYTES_PER_ELEMENT,
+          numComponents = 3,
+          type = gl.FLOAT;
+    let offset = 0;
     mat4.identity(worldMatrix);
     mat4.lookAt(viewMatrix, [0, 0, -3], [0, 0, 0], [0, 1, 0]);
-    mat4.perspective(projMatrix, Math.PI/4, canvas.width/canvas.height, 0.1, 1000);  
-    gl.uniformMatrix4fv(mWorldUniformLocation, gl.FALSE, worldMatrix );
-    gl.uniformMatrix4fv(mViewUniformLocation, gl.FALSE, viewMatrix );
-    gl.uniformMatrix4fv(mProjUniformLocation, gl.FALSE, projMatrix );
+
+    // Create a perspective matrix, a special matrix that is used
+    // to simulate the distortion of perspective in a camera.
+    // Our field of view is 45 degrees -> radians
+    const fieldOfView = Math.PI / 4;
+    const projectionMatrix = mat4.create();
+    // Glmatrix.js always has the first argument as the destination to receive the result.
+    mat4.perspective(projectionMatrix, fieldOfView, canvas.width / canvas.height, 0.1, 1000);  
+
+    // 2nd: number of elements, 3rd: type of element, 5th: size of each vertex, 6th: offset from beginning of vertex to this attribute
+    gl.vertexAttribPointer(programInfo.attribLocations.vertexPosition, numComponents, type, normalize, stride, offset);
+    gl.enableVertexAttribArray(programInfo.attribLocations.vertexPosition);
+
+    // 2nd: number of elements, 3rd: type of element, 5th: size of each vertex, 6th: offset from beginning of vertex to this attribute
+    offset = 3 * Float32Array.BYTES_PER_ELEMENT;
+    gl.vertexAttribPointer(programInfo.attribLocations.vertexColor, numComponents, type, normalize, stride, offset);
+    gl.enableVertexAttribArray(programInfo.attribLocations.vertexColor);
+
+    // Tell WebGL to use our program when drawing
+    gl.useProgram(shaderProgram);
     
+    // Set the shader uniforms
+    gl.uniformMatrix4fv(programInfo.uniformLocations.mWorldUniformLocation, normalize, worldMatrix);
+    gl.uniformMatrix4fv(programInfo.uniformLocations.modelViewMatrix, normalize, viewMatrix);
+    gl.uniformMatrix4fv(programInfo.uniformLocations.projectionMatrix, normalize, projectionMatrix);
+    
+    // rgba 0-1 values
+    gl.clearColor(0.1, 0.5, 0.6, 0.5);
+
+    const identityMatrix = new Float32Array(16);
+    mat4.identity(identityMatrix);
+
+    gl.enable(gl.DEPTH_TEST);
+
     /* ------------ */
     /* --- LOOP --- */
     /* ------------ */
 
-    const identityMatrix = new Float32Array(16);
-          angleIncrement = Math.PI/60;
-          fpsDisplay = document.getElementById('fps');
-
-    let angle = 0,
-        oldtime = 0,
-        fps = 0;
-
-    // rgba 0-1 values
-    gl.clearColor(0.1, 0.5, 0.6, 0.5);
-    mat4.identity(identityMatrix);
-    gl.enable(gl.DEPTH_TEST);
-
-    loop = (time) => {
-        fps = Math.round(1000/(time-oldtime));
-        oldtime = time;
-        fpsDisplay.innerHTML = `${fps} fps`;
+    const angleIncrement = Math.PI / 200;
+    let angle = 0;
+    render = () => {        
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        
         mat4.rotate(worldMatrix, identityMatrix, angle, [1, 1, 0]);
-        gl.uniformMatrix4fv(mWorldUniformLocation, gl.FALSE, worldMatrix );
-        gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 6);
         angle += angleIncrement;
-        requestAnimationFrame(loop);
+
+        gl.uniformMatrix4fv(programInfo.uniformLocations.mWorldUniformLocation, gl.FALSE, worldMatrix );
+        
+        gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 6);
+        
+        requestAnimationFrame(render);
     }
-   requestAnimationFrame(loop);
+   requestAnimationFrame(render);
 }
+
+// Draw
+document.addEventListener('DOMContentLoaded', main());
