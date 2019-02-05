@@ -1,58 +1,68 @@
-let vertices = [];
+// ------------------------- //
+// --- Vertices position --- //
+// ------------------------- //
 
-class Pyramid {
+let positions = [];
+
+class Tetrahedron {
     constructor(cx, cy, cz, width, height) {
         const radius = (width / 2) / Math.cos(Math.PI / 6);
 
+        // Vertice 1 - Position
         const v1 = {
             x: cx,
             y: cy + height / 2,
             z: cz,
-            r: Math.random(),
-            g: Math.random(),
-            b: Math.random()
+            r: 1, // Red
+            g: 0, // Green
+            b: 0  // blue
         };
 
+        // Vertice 2 - Position
         const v2 = {
             x: cx,
             y: cy - height / 2,
             z: cz + radius,
-            r: Math.random(),
-            g: Math.random(),
-            b: Math.random()
+            r: 0,
+            g: 0,
+            b: 1
         };
 
+        // Vertice 3 - Position
         const v3 = {
             x: cx + width / 2,
             y: cy - height / 2,
             z: cz - (Math.sin(Math.PI / 6) * radius),
-            r: Math.random(),
-            g: Math.random(),
-            b: Math.random()
+            r: 0,
+            g: 0,
+            b: 1
         };
 
+        // Vertice 4 - Position
         const v4 = {
             x: cx - width / 2,
             y: cy - height / 2,
             z: cz - (Math.sin(Math.PI / 6) * radius),
-            r: Math.random(),
-            g: Math.random(),
-            b: Math.random()
+            r: 1,
+            g: 0,
+            b: 1
         };
 
-        Pyramid.addSurface([v1, v2, v3]);
-        Pyramid.addSurface([v1, v3, v4]);
-        Pyramid.addSurface([v1, v4, v2]);
-        Pyramid.addSurface([v3, v2, v4]);
+        Tetrahedron.addSurface([v1, v2, v3]);
+        Tetrahedron.addSurface([v1, v3, v4]);
+        Tetrahedron.addSurface([v1, v4, v2]);
+        Tetrahedron.addSurface([v3, v2, v4]);
     }
 
     static addSurface(surface) {
         surface.forEach(element => {
             const value = Object.values(element);
-            value.forEach(element => vertices.push(element));
+            value.forEach(element => positions.push(element));
         });
     }
 }
+
+
 
 // ------------------- //
 // --- Init buffer --- //
@@ -60,10 +70,90 @@ class Pyramid {
 
 // Initialize the buffers we'll need
 initBuffers = (gl) => {
+    // Create a buffer for the tetrahedron's positions
     const positionBuffer = gl.createBuffer();
+
+    // Select the positionBuffer as the one to apply buffer operations to from here out
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+    // Ceate tetrahedron
+    new Tetrahedron(0, 0, 0, 1, Math.sqrt(6) / 3);
+
+    // Pass the list of positions into WebGL to build the shape
+    // We do this by creating a Float32Array from the JavaScript array, then use it to fill the current buffer
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
 }
+
+
+
+// ------------------ //
+// --- Draw scene --- //
+// ------------------ //
+
+drawScene = (gl, programInfo, buffers, tetraRotation) => {
+    // Clear to white, fully opaque
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    // Clear everything
+    gl.clearDepth(1.0);
+    // Enable depth testing - opaque surfaces
+    gl.enable(gl.DEPTH_TEST);
+    // Near things obscure far things
+    gl.depthFunc(gl.LEQUAL);
+
+    // Clear the canvas before we start drawing on it
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // Create a perspective matrix, a special matrix that is used
+    // to simulate the distortion of perspective in a camera.
+    // Our field of view is 45 degrees -> radians
+    const fieldOfView = Math.PI / 4;
+    // with a width/height ratio that matches the display size of the canvas
+    const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
+    // We only want to see objects between 0.1 units and 100 units away from the camera
+    const zNear = 0.1;
+    const zFar = 100;
+    const projectionMatrix = mat4.create();
+    // Glmatrix.js always has the first argument as the destination to receive the result.
+    mat4.perspective(projectionMatrix, fieldOfView, aspect, zNear, zFar);
+
+    // Set the drawing position to the "identity" point, which is the center of the scene.
+    const modelViewMatrix = mat4.create(),
+        identityMatrix = mat4.create(),
+        viewMatrix = mat4.create();
+
+    mat4.lookAt(viewMatrix, [0, 0, -2], [0, 0, 0], [0, 1, 0]);
+
+    // Arg: destination matrix, matrix to rotate, amount to rotate in radians, axis to rotate around (X)
+    mat4.rotate(modelViewMatrix, identityMatrix, tetraRotation, [0, 1, 0]);
+
+    const normalize = false,
+        stride = 6 * Float32Array.BYTES_PER_ELEMENT,
+        numComponents = 3,
+        type = gl.FLOAT;
+    let offset = 0;
+    // gl.bindBuffer(gl.ARRAY_BUFFER, buffers.position);
+    // 2nd: number of elements, 3rd: type of element, 5th: size of each vertex, 6th: offset from beginning of vertex to this attribute
+    gl.vertexAttribPointer(programInfo.attribLocations.vertexPosition, numComponents, type, normalize, stride, offset);
+    gl.enableVertexAttribArray(programInfo.attribLocations.vertexPosition);
+
+    offset = 3 * Float32Array.BYTES_PER_ELEMENT;
+    // 2nd: number of elements, 3rd: type of element, 5th: size of each vertex, 6th: offset from beginning of vertex to this attribute
+    gl.vertexAttribPointer(programInfo.attribLocations.vertexColor, numComponents, type, normalize, stride, offset);
+    gl.enableVertexAttribArray(programInfo.attribLocations.vertexColor);
+
+    // Tell WebGL to use our program when drawing
+    gl.useProgram(programInfo.program);
+
+    // Set the shader uniforms
+    gl.uniformMatrix4fv(programInfo.uniformLocations.mWorldUniformLocation, normalize, modelViewMatrix);
+    gl.uniformMatrix4fv(programInfo.uniformLocations.modelViewMatrix, normalize, viewMatrix);
+    gl.uniformMatrix4fv(programInfo.uniformLocations.projectionMatrix, normalize, projectionMatrix);
+
+    // Params: mode, first, count
+    gl.drawArrays(gl.TRIANGLES, 0, positions.length / 6);
+}
+
+
 
 // ------------------- //
 // --- Load shader --- //
@@ -89,6 +179,8 @@ loadShader = (gl, type, source) => {
     return shader;
 }
 
+
+
 // --------------------------- //
 // --- Init shader program --- //
 // --------------------------- //
@@ -112,6 +204,8 @@ initShaderProgram = (gl, vsSource, fsSource) => {
 
     return shaderProgram;
 }
+
+
 
 // --------------------- //
 // --- Main function --- //
@@ -160,13 +254,9 @@ main = () => {
     // Initialize a shader program; this is where all the lighting for the vertices and so forth is established
     const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
 
-    new Pyramid(0, 0, 0, 1, Math.sqrt(6) / 3);
-    
-    // Init buffers
-    initBuffers(gl);
-
     // Collect all the info needed to use the shader program
     const programInfo = {
+        program: shaderProgram,
         attribLocations: {
             vertexPosition: gl.getAttribLocation(shaderProgram, 'aVertexPosition'),
             vertexColor: gl.getAttribLocation(shaderProgram, 'aVertexColor'),
@@ -178,69 +268,22 @@ main = () => {
         },
     };
 
-    const worldMatrix = new Float32Array(16),
-          viewMatrix = new Float32Array(16),
-          normalize = false,
-          stride = 6 * Float32Array.BYTES_PER_ELEMENT,
-          numComponents = 3,
-          type = gl.FLOAT;
-    let offset = 0;
-    mat4.identity(worldMatrix);
-    mat4.lookAt(viewMatrix, [0, 0, -3], [0, 0, 0], [0, 1, 0]);
+    // Here's where we call the routine that builds all the objects we'll be drawing
+    const buffers = initBuffers(gl);
 
-    // Create a perspective matrix, a special matrix that is used
-    // to simulate the distortion of perspective in a camera.
-    // Our field of view is 45 degrees -> radians
-    const fieldOfView = Math.PI / 4;
-    const projectionMatrix = mat4.create();
-    // Glmatrix.js always has the first argument as the destination to receive the result.
-    mat4.perspective(projectionMatrix, fieldOfView, canvas.width / canvas.height, 0.1, 1000);  
-
-    // 2nd: number of elements, 3rd: type of element, 5th: size of each vertex, 6th: offset from beginning of vertex to this attribute
-    gl.vertexAttribPointer(programInfo.attribLocations.vertexPosition, numComponents, type, normalize, stride, offset);
-    gl.enableVertexAttribArray(programInfo.attribLocations.vertexPosition);
-
-    // 2nd: number of elements, 3rd: type of element, 5th: size of each vertex, 6th: offset from beginning of vertex to this attribute
-    offset = 3 * Float32Array.BYTES_PER_ELEMENT;
-    gl.vertexAttribPointer(programInfo.attribLocations.vertexColor, numComponents, type, normalize, stride, offset);
-    gl.enableVertexAttribArray(programInfo.attribLocations.vertexColor);
-
-    // Tell WebGL to use our program when drawing
-    gl.useProgram(shaderProgram);
-    
-    // Set the shader uniforms
-    gl.uniformMatrix4fv(programInfo.uniformLocations.mWorldUniformLocation, normalize, worldMatrix);
-    gl.uniformMatrix4fv(programInfo.uniformLocations.modelViewMatrix, normalize, viewMatrix);
-    gl.uniformMatrix4fv(programInfo.uniformLocations.projectionMatrix, normalize, projectionMatrix);
-    
-    // rgba 0-1 values
-    gl.clearColor(0.1, 0.5, 0.6, 0.5);
-
-    const identityMatrix = new Float32Array(16);
-    mat4.identity(identityMatrix);
-
-    gl.enable(gl.DEPTH_TEST);
-
-    /* ------------ */
-    /* --- LOOP --- */
-    /* ------------ */
-
-    const angleIncrement = Math.PI / 200;
-    let angle = 0;
-    render = () => {        
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        
-        mat4.rotate(worldMatrix, identityMatrix, angle, [1, 1, 0]);
-        angle += angleIncrement;
-
-        gl.uniformMatrix4fv(programInfo.uniformLocations.mWorldUniformLocation, gl.FALSE, worldMatrix );
-        
-        gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 6);
-        
+    const angle = Math.PI / 200;
+    // Set the rotation at 0 for the first draw
+    let tetraRotation = 0;
+    // Draw the scene repeatedly
+    render = () => {
+        drawScene(gl, programInfo, buffers, tetraRotation);
+        tetraRotation += angle;
         requestAnimationFrame(render);
     }
    requestAnimationFrame(render);
 }
+
+
 
 // Draw
 document.addEventListener('DOMContentLoaded', main());
